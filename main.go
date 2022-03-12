@@ -3,101 +3,87 @@ package main
 import (
 	"flag"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 
-	"github.com/sepaper/envoy-hot-restarter/internals/watcher"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/sepaper/envoy-hot-restarter/internals/envoy"
+	"github.com/sepaper/envoy-hot-restarter/internals/util"
+	"github.com/sepaper/envoy-hot-restarter/internals/watcher"
 )
 
 var (
-	logger           log.FieldLogger
-	envoyConfigPath  string
-	hotRestarterPath string
-	envoyExecPath    string
-	hotRestarter     *exec.Cmd
+	logger          log.FieldLogger
+	envoyConfigPath string
+	envoyExecPath   string
+	sigs            chan os.Signal
+	manager         *envoy.EnvoyManager
 )
 
 func init() {
-	logger = log.New()
-	log.SetLevel(log.InfoLevel)
+	logger = util.GetLogger()
+	flag.StringVar(&envoyConfigPath, "envoyConfigPath", "/envoy/envoy-static.yaml", "Envoy config file path")
+	flag.StringVar(&envoyExecPath, "envoyExecPath", "/envoy/envoy", "Envoy exec file path")
+	//TODO: init service-node env var
 
-	flag.StringVar(&hotRestarterPath, "hotRestarterPath", "hot-restarter.py", "Hot restarter python script path")
-	flag.StringVar(&envoyConfigPath, "envoyConfigPath", "config.yaml", "Envoy config file path")
-	flag.StringVar(&envoyExecPath, "envoyExecPath", "start_envoy.sh", "Envoy exec file path")
+	sigs = make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	manager = &envoy.EnvoyManager{
+		RestartEpoch:    -1,
+		Envoys:          make([]*envoy.Envoy, 0, 5),
+		StoppedEnvoy:    make(chan *envoy.Envoy, 1),
+		StartedEnvoy:    make(chan *envoy.Envoy, 1),
+		EnvoyExecPath:   envoyExecPath,
+		EnvoyConfigpath: envoyConfigPath,
+	}
 }
 
 type EnvoyConfigFileEventHandler struct {
 }
 
 func (h *EnvoyConfigFileEventHandler) On_deleted() error {
-	// send SIGTERM, SIGINT to python hot restarter
-	return sendSigTermToHotRestarter()
+	return nil
 }
 func (h *EnvoyConfigFileEventHandler) On_created() error {
-	// send SIGHUP to python hot restarter
-	return sendSigHupToHotRestarter()
-}
-func (h *EnvoyConfigFileEventHandler) On_moved() error {
-	// send SIGHUP to python hot restarter
-	return sendSigHupToHotRestarter()
+	return nil
 }
 func (h *EnvoyConfigFileEventHandler) On_modified() error {
-	// send SIGHUP to python hot restarter
-	return sendSigHupToHotRestarter()
+	logger.Info("file modified")
+	manager.StartNewEnvoy()
+	return nil
 }
 
-func sendSigTermToHotRestarter() error {
-	return hotRestarter.Process.Signal(syscall.SIGTERM)
-	/*
-		p, _ := os.FindProcess(os.Getpid())
-		p.Signal(syscall.SIGTERM)
-	*/
-}
-
-func sendSigHupToHotRestarter() error {
-	return hotRestarter.Process.Signal(syscall.SIGHUP)
-}
-
-func main() {
-	pid := os.Getegid()
-	ppid := os.Getppid()
-	log.Info(pid, ppid)
-
-	sigs := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
-
-	hotRestarter = exec.Command("python", hotRestarterPath, envoyExecPath)
-	err := hotRestarter.Start()
-	if err != nil {
-		log.Error("")
-		return
-	}
-
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGCHLD)
-
-	//signal handler
+func startSignalHandler() {
 	go func() {
 		for {
 			select {
 			case sig := <-sigs:
 				if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-					log.Info("")
-					sendSigTermToHotRestarter()
-				} else if sig == syscall.SIGCHLD {
-					log.Info("")
-					done <- true
+					logger.Info("got SIGINT or SIGTERM")
+					manager.Stop()
 				}
 			}
 		}
 	}()
+}
 
-	// watcher for file change
+func startWatcher() {
 	go func() {
 		watcher.Watch(envoyConfigPath, &EnvoyConfigFileEventHandler{})
 	}()
+}
 
-	log.Info("")
-	<-done
+func main() {
+	flag.Parse()
+	logger.Info("starting hot-restarter (envoyExecPath:", envoyExecPath, ", envoyConfigPath: ", envoyConfigPath, ")")
+
+	startSignalHandler()
+	startWatcher()
+
+	manager.Start()
+	manager.StartNewEnvoy()
+	manager.Wait()
+	logger.Info("sucessfully terminated envoy manager and all envoys, so terminate hot-restarter")
 }
