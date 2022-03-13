@@ -21,6 +21,7 @@ type EnvoyManager struct {
 	RestartEpoch    int
 	EnvoyExecPath   string
 	EnvoyConfigpath string
+	EnvoyNodeId     string
 	Done            bool
 }
 
@@ -62,7 +63,7 @@ func (manager *EnvoyManager) StartNewEnvoy() {
 	logger.Info("starting new envoy at epoch ", manager.RestartEpoch)
 	manager.WaitGroup.Add(1)
 
-	envoyCmd := exec.Command(manager.EnvoyExecPath, "-c", manager.EnvoyConfigpath, "--restart-epoch", strconv.Itoa(manager.RestartEpoch)) //, //"--service-node", "test", )
+	envoyCmd := exec.Command(manager.EnvoyExecPath, "-c", manager.EnvoyConfigpath, "--restart-epoch", strconv.Itoa(manager.RestartEpoch), "--service-node", manager.EnvoyNodeId)
 	envoyCmd.Stdout = os.Stdout
 	envoyCmd.Stderr = os.Stderr
 

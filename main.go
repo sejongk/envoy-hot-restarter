@@ -17,6 +17,7 @@ var (
 	logger          log.FieldLogger
 	envoyConfigPath string
 	envoyExecPath   string
+	envoyNodeId     string
 	sigs            chan os.Signal
 	manager         *envoy.EnvoyManager
 )
@@ -25,8 +26,8 @@ func init() {
 	logger = util.GetLogger()
 	flag.StringVar(&envoyConfigPath, "envoyConfigPath", "/envoy/envoy-static.yaml", "Envoy config file path")
 	flag.StringVar(&envoyExecPath, "envoyExecPath", "/envoy/envoy", "Envoy exec file path")
+	flag.StringVar(&envoyNodeId, "envoyNodeId", "node-id", "Envoy service node id")
 	flag.Parse()
-	//TODO: init service-node env var
 
 	sigs = make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -38,6 +39,7 @@ func init() {
 		StartedEnvoy:    make(chan *envoy.Envoy, 1),
 		EnvoyExecPath:   envoyExecPath,
 		EnvoyConfigpath: envoyConfigPath,
+		EnvoyNodeId:     envoyNodeId,
 	}
 }
 
