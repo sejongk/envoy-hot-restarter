@@ -25,6 +25,7 @@ func init() {
 	logger = util.GetLogger()
 	flag.StringVar(&envoyConfigPath, "envoyConfigPath", "/envoy/envoy-static.yaml", "Envoy config file path")
 	flag.StringVar(&envoyExecPath, "envoyExecPath", "/envoy/envoy", "Envoy exec file path")
+	flag.Parse()
 	//TODO: init service-node env var
 
 	sigs = make(chan os.Signal, 1)
@@ -76,7 +77,6 @@ func startWatcher() {
 }
 
 func main() {
-	flag.Parse()
 	logger.Info("starting hot-restarter (envoyExecPath:", envoyExecPath, ", envoyConfigPath: ", envoyConfigPath, ")")
 
 	startSignalHandler()
