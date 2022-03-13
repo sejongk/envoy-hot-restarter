@@ -47,6 +47,8 @@ type EnvoyConfigFileEventHandler struct {
 }
 
 func (h *EnvoyConfigFileEventHandler) On_deleted() error {
+	logger.Info("file deleted")
+	manager.StartNewEnvoy()
 	return nil
 }
 func (h *EnvoyConfigFileEventHandler) On_created() error {

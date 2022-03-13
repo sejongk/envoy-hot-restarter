@@ -47,6 +47,13 @@ func Watch(path string, handler FileSystemEventHandler) {
 					err = handler.On_created()
 				} else if lastEvent.Op&fsnotify.Remove == fsnotify.Remove {
 					err = handler.On_deleted()
+					if err != nil {
+						logger.Error(err)
+					}
+					err = watcher.Add(path) // re-register target file to watcher for continuous watching
+					if err != nil {
+						logger.Error(err)
+					}
 				}
 				if err != nil {
 					logger.Error(err)
